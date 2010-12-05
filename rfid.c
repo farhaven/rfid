@@ -5,7 +5,9 @@
 #include <string.h>
 #include <unistd.h>
 #include <termios.h>
+#include <errno.h>
 
+char *device = "/dev/ttyUSB0";
 FILE *fd_device_w;
 FILE *fd_device_r;
 
@@ -242,14 +244,30 @@ int dump_info() { /* {{{ */
 }
 /* }}} */
 
-int main(int argc, char **argv) { /* {{{ */
-    if (argc > 1 && !strcmp(argv[1], "-h")) {
-        printf("Usage: ./%s\n", argv[0]);
-        return 0;
+void usage(char *name) {
+    printf("Usage: %s tty\n", name);
+    exit(0);
+}
+
+int main(int argc, char* argv[]) { /* {{{ */
+    if(argc > 2) usage(argv[0]);
+    for(int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "-h")) usage(argv[0]);
+        else device = argv[i];
     }
 
-    fd_device_w = fopen("/dev/ttyUSB0", "w");
-    fd_device_r = fopen("/dev/ttyUSB0", "r");
+    if ((fd_device_r = fopen(device, "r")) == NULL) {
+        fprintf(stderr, "couldn't open %s for reading: %s\n", device, strerror(errno));
+        exit(1);
+    }
+    if (!isatty(fileno(fd_device_r))) {
+        fprintf(stderr, "%s is not a tty!\n", device);
+        exit(1);
+    }
+    if ((fd_device_w = fopen(device, "w")) == NULL) {
+        fprintf(stderr, "couldn't open %s for writing: %s\n", device, strerror(errno));
+        exit(1);
+    }
     tcflush(fileno(fd_device_w), TCIOFLUSH);
     tcflush(fileno(fd_device_r), TCIOFLUSH);
 
