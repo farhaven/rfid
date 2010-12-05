@@ -240,6 +240,45 @@ void dump_data() { /* {{{ */
 }
 /* }}} */
 
+/* dumps and interprets all readable sector trailers */
+void dump_sector_trailers() { /* {{{ */
+    for(int sector = 0; sector <= 0x0F; sector++) {
+        int err = login_sector(sector, 0xAA, keys[2]);
+        if (err != 0x02) {
+            printf("authentication error for sector %02hhX: %s\n", sector, get_errstr(err));
+            continue;
+        }
+        char *data = (char *) malloc(sizeof(char) * 16);
+        int len = read_block(0x03, data);
+        if (len < 0) {
+            free(data);
+            continue;
+        }
+        char ac[4] = { data[6], data[7], data[8], data[9] };
+        free(data);
+        printf("%02hhX: %02hhX %02hhX %02hhX %02hhX\n", sector, ac[0], ac[1], ac[2], ac[3]);
+        printf("  Data block 0x03: ");
+        printf("C3=%d ", (ac[2] & (1 << 7)? 1: 0));
+        printf("C2=%d ", (ac[2] & (1 << 3)? 1: 0));
+        printf("C1=%d (sector trailer)\n", (ac[1] & (1 << 7)? 1: 0));
+
+        printf("  Data block 0x02: ");
+        printf("C3=%d ", (ac[2] & (1 << 6)? 1: 0));
+        printf("C2=%d ", (ac[2] & (1 << 2)? 1: 0));
+        printf("C1=%d\n", (ac[1] & (1 << 6)? 1: 0));
+
+        printf("  Data block 0x01: ");
+        printf("C3=%d ", (ac[2] & (1 << 5)? 1: 0));
+        printf("C2=%d ", (ac[2] & (1 << 1)? 1: 0));
+        printf("C1=%d\n", (ac[1] & (1 << 5)? 1: 0));
+
+        printf("  Data block 0x00: ");
+        printf("C3=%d ", (ac[2] & (1 << 4)? 1: 0));
+        printf("C2=%d ", (ac[2] & (1 << 0)? 1: 0));
+        printf("C1=%d\n", (ac[1] & (1 << 4)? 1: 0));
+    }
+} /* }}} */
+
 int dump_info() { /* {{{ */
     unsigned char *data = (unsigned char *)malloc(sizeof(unsigned char) * 256);
     write_cmd("\x01", 1);
