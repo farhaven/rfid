@@ -123,7 +123,7 @@ int read_block(unsigned char idx, char *dst) { /* {{{ */
     memcpy(dst, &(tmp[4]), 16);
     free(tmp);
 
-    return len;
+    return len - 5;
 }
 /* }}} */
 
@@ -180,7 +180,7 @@ int write_sector_key(unsigned char idx, char *key) { /* {{{ */
 void dump_data() { /* {{{ */
     fprintf(stderr, "S#:B# Data\n");
     for(int sector = 0; sector <= 0x0F; sector++) {
-        int err = login_sector(sector, 'A', keys[0]);
+        int err = login_sector(sector, 'A', keys[2]);
         if (err != 0x02) {
             fprintf(stderr, "authentication error for sector %02hhX: %s\n", sector, get_errstr(err));
             continue;
@@ -192,7 +192,7 @@ void dump_data() { /* {{{ */
             if (len < 0) {
                 fprintf(stderr, "error: %s", get_errstr(-len));
             } else {
-                dump_word(data, 16);
+                dump_word(data, len);
             }
             fprintf(stderr, "\n");
             free(data);
@@ -201,14 +201,14 @@ void dump_data() { /* {{{ */
 }
 /* }}} */
 
-void dump_info() { /* {{{ */
+int dump_info() { /* {{{ */
     unsigned char *data = (unsigned char *)malloc(sizeof(unsigned char) * 256);
     write_cmd("\x01", 1);
     int len = receive_data(data);
     fprintf(stderr, "Card information:\n");
 
     fprintf(stderr, "  Present: %02hhX (%s)\n", data[3], get_errstr(data[3]));
-    if (data[3] != 0x00) return;
+    if (data[3] != 0x00) return 0; /* no card present */
 
     fprintf(stderr, "  Serial: ");
     for (unsigned char i = 0; i < len - 6; i++) {
@@ -232,6 +232,7 @@ void dump_info() { /* {{{ */
     }
     fprintf(stderr, ")\n", data[len - 2]);
     free(data);
+    return 1;
 }
 /* }}} */
 
@@ -240,22 +241,11 @@ int main(int argc, char **argv) { /* {{{ */
         fprintf(stderr, "Usage: socat EXEC:\"%s\" /dev/ttyUSB0,raw,echo=0\n", argv[0]);
         return 0;
     }
-    dump_info();
-    fprintf(stderr, "Dumping data:\n");
-    dump_data();
-    
-    fprintf(stderr, "Attempting to change master key for sector 0x01\n");
-    int err = login_sector(0x01, 'A', keys[0]);
-    if (err != 0x02) {
-        fprintf(stderr, "error %02hhX during auth: %s\n", err, get_errstr(err));
-        return 0;
+
+    if (dump_info()) {
+        fprintf(stderr, "Dumping data:\n");
+        dump_data();
     }
-    char *newkey = (char *)malloc(sizeof(char) * 6);
-    memcpy(newkey, keys[2], 6);
-    int len = write_sector_key(0x01, newkey);
-    dump_word(newkey, 6);
-    fprintf(stderr, "\n%02hhX\n", len);
-    free(newkey);
 
     return 0;
 }
