@@ -350,6 +350,8 @@ int main(int argc, char* argv[]) { /* {{{ */
     if (dump_info()) {
         printf("Dumping data:\n");
         dump_data();
+        printf("Dumping sector trailers:\n");
+        dump_sector_trailers();
     }
 
     return 0;
