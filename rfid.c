@@ -244,16 +244,22 @@ int dump_info() { /* {{{ */
 }
 /* }}} */
 
-void usage(char *name) {
-    printf("Usage: %s tty\n", name);
+/* print usage and exit */
+void usage(char *name) { /* {{{ */
+    printf("Usage: %s [-d tty] [-h]\n", name);
+    printf("-d tty communicate with the RFID reader using device tty\n");
+    printf("-h     show this help\n");
     exit(0);
 }
+/* }}} */
 
 int main(int argc, char* argv[]) { /* {{{ */
-    if(argc > 2) usage(argv[0]);
     for(int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "-h")) usage(argv[0]);
-        else device = argv[i];
+        else if(!strcmp(argv[i], "-d")) {
+            if (++i < argc) device = argv[i];
+            else usage(argv[0]);
+        }else usage(argv[0]);
     }
 
     if ((fd_device_r = fopen(device, "r")) == NULL) {
