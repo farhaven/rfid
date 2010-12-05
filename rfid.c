@@ -137,6 +137,35 @@ int read_block(unsigned char idx, char *dst) { /* {{{ */
 }
 /* }}} */
 
+/* write 16 bytes of data from buffer src into block idx
+ * return value: 16 on success (data written into block idx is also stored in src)
+ *             -err on failure
+ */
+int write_block(unsigned char idx, char *src) { /* {{{ */
+    char *tmp;
+
+    tmp = (char *) malloc(sizeof(char) * 18);
+    tmp[0] = 0x04;
+    tmp[1] = idx;
+    memcpy(&(tmp[2]), src, 16);
+    write_cmd(tmp, 18);
+    free(tmp);
+
+    tmp = (char *)malloc(sizeof(char) * 256);
+    int len = receive_data(tmp);
+    int err = tmp[3];
+
+    if (err != 0x00) {
+        free(tmp);
+        return -err;
+    }
+
+    memcpy(src, &(tmp[4]), 16);
+    free(tmp);
+
+    return len - 5;
+} /* }}} */
+
 /* attempts an authentication to sector idx with the supplied key.
  * if key_type is 0xAA then KeyA is used, if it's 0xBB, KeyB is used.
  * All other values for key_type result in undefined behaviour!
