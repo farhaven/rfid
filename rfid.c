@@ -217,7 +217,7 @@ int write_sector_key(unsigned char idx, char *key) { /* {{{ */
  * key #2 in mode 'A' is used
  */
 void dump_data() { /* {{{ */
-    printf("S#:B# Data\n");
+    printf("S#:B# data (hex)                       data (ASCII)\n");
     for(int sector = 0; sector <= 0x0F; sector++) {
         int err = login_sector(sector, 0xAA, keys[2]);
         if (err != 0x02) {
