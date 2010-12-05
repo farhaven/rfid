@@ -1,14 +1,20 @@
 #define _BSD_SOURCE
+#define _XOPEN_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <termios.h>
+
+FILE *fd_device_w;
+FILE *fd_device_r;
 
 /* mifare default keys */
 char *keys[] = {
     "\xA0\xA1\xA2\xA3\xA4\xA5",
     "\xB0\xB1\xB2\xB3\xB4\xB5",
-    "\xFF\xFF\xFF\xFF\xFF\xFF"
+    "\xFF\xFF\xFF\xFF\xFF\xFF",
+    "\xD3\xF7\xD3\xF7\xD3\xF7"
 };
 
 /* table of error strings that can be received from the RFID reader */
@@ -48,16 +54,16 @@ const char *get_errstr(int e) { /* {{{ */
 /* dumps hex and ascii values of word w with length c */
 void dump_word(char *w, unsigned int c) { /* {{{ */
     for (int i = 0; i < c; i++) {
-        fprintf(stderr, "%02hhX", w[i]);
+        printf("%02hhX", w[i]);
     }
-    fprintf(stderr, " |");
+    printf(" |");
     for (int i = 0; i < c; i++) {
         if ((w[i] >= 0x21) && (w[i] <= 0x7E))
-            fprintf(stderr, "%c", w[i]);
+            printf("%c", w[i]);
         else
-            fprintf(stderr, ".");
+            printf(".");
     }
-    fprintf(stderr, "|");
+    printf("|");
 };
 /* }}} */
 
@@ -75,11 +81,11 @@ char *command(char *data, unsigned char len) { /* {{{ */
 }
 /* }}} */
 
-/* write command in data with length len (as created by (char *)(command(data, len))) to stdout */
+/* write command in data with length len (as created by (char *)(command(data, len))) to fd_device */
 void write_cmd(char *data, unsigned char len) { /* {{{ */
     char *cmd = command(data, len);
-    fwrite(cmd, len+3, sizeof(char), stdout);
-    fflush(stdout);
+    fwrite(cmd, len+3, sizeof(char), fd_device_w);
+    fseek(fd_device_w, 0L, SEEK_CUR);
     free(cmd);
 } /* }}} */
 
@@ -88,10 +94,10 @@ void write_cmd(char *data, unsigned char len) { /* {{{ */
  */
 int receive_data(char *dst) { /* {{{ */
     char tmp;
-    fread(dst, 2, sizeof(char), stdin);
+    fread(dst, 2, sizeof(char), fd_device_r);
     int len = dst[1];
     for (int i = 0; i < len && i < (256 - 2); i++) {
-        fread(&tmp, 1, sizeof(char), stdin);
+        fread(&tmp, 1, sizeof(char), fd_device_r);
         dst[i + 2] = tmp;
     }
     return len + 2;
@@ -178,23 +184,23 @@ int write_sector_key(unsigned char idx, char *key) { /* {{{ */
  * key #2 in mode 'A' is used
  */
 void dump_data() { /* {{{ */
-    fprintf(stderr, "S#:B# Data\n");
+    printf("S#:B# Data\n");
     for(int sector = 0; sector <= 0x0F; sector++) {
         int err = login_sector(sector, 'A', keys[2]);
         if (err != 0x02) {
-            fprintf(stderr, "authentication error for sector %02hhX: %s\n", sector, get_errstr(err));
+            printf("authentication error for sector %02hhX: %s\n", sector, get_errstr(err));
             continue;
         }
         for(int block = 0; block <= 0x03; block++) {
             char *data = (char *)malloc(sizeof(char) * 16);
             int len = read_block(block, data);
-            fprintf(stderr, "%02hhX:%02hhX ", sector, block);
+            printf("%02hhX:%02hhX ", sector, block);
             if (len < 0) {
-                fprintf(stderr, "error: %s", get_errstr(-len));
+                printf("error: %s", get_errstr(-len));
             } else {
                 dump_word(data, len);
             }
-            fprintf(stderr, "\n");
+            printf("\n");
             free(data);
         }
     }
@@ -205,32 +211,32 @@ int dump_info() { /* {{{ */
     unsigned char *data = (unsigned char *)malloc(sizeof(unsigned char) * 256);
     write_cmd("\x01", 1);
     int len = receive_data(data);
-    fprintf(stderr, "Card information:\n");
+    printf("Card information:\n");
 
-    fprintf(stderr, "  Present: %02hhX (%s)\n", data[3], get_errstr(data[3]));
+    printf("  Present: %02hhX (%s)\n", data[3], get_errstr(data[3]));
     if (data[3] != 0x00) return 0; /* no card present */
 
-    fprintf(stderr, "  Serial: ");
+    printf("  Serial: ");
     for (unsigned char i = 0; i < len - 6; i++) {
-        fprintf(stderr, "%02hhX", data[i + 4]);
+        printf("%02hhX", data[i + 4]);
     }
 
-    fprintf(stderr, "\n  Type: %02hhX (", data[len - 2]);
+    printf("\n  Type: %02hhX (", data[len - 2]);
     switch(data[len - 2]) {
         case 0x01:
-            fprintf(stderr, "Mifare Standard 1K");
+            printf("Mifare Standard 1K");
             break;
         case 0x03:
-            fprintf(stderr, "Mifare Ultra Light");
+            printf("Mifare Ultra Light");
             break;
         case 0x04:
-            fprintf(stderr, "Mifare Standard 4K");
+            printf("Mifare Standard 4K");
             break;
         default:
-            fprintf(stderr, "unknown");
+            printf("unknown");
             break;
     }
-    fprintf(stderr, ")\n", data[len - 2]);
+    printf(")\n", data[len - 2]);
     free(data);
     return 1;
 }
@@ -238,12 +244,17 @@ int dump_info() { /* {{{ */
 
 int main(int argc, char **argv) { /* {{{ */
     if (argc > 1 && !strcmp(argv[1], "-h")) {
-        fprintf(stderr, "Usage: socat EXEC:\"%s\" /dev/ttyUSB0,raw,echo=0\n", argv[0]);
+        printf("Usage: ./%s\n", argv[0]);
         return 0;
     }
 
+    fd_device_w = fopen("/dev/ttyUSB0", "w");
+    fd_device_r = fopen("/dev/ttyUSB0", "r");
+    tcflush(fileno(fd_device_w), TCIOFLUSH);
+    tcflush(fileno(fd_device_r), TCIOFLUSH);
+
     if (dump_info()) {
-        fprintf(stderr, "Dumping data:\n");
+        printf("Dumping data:\n");
         dump_data();
     }
 
