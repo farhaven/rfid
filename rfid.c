@@ -19,6 +19,7 @@ char *keys[] = {
     "\xD3\xF7\xD3\xF7\xD3\xF7",
     "\x00\x00\xFF\x07\x80\x69",
     "\xFF\x88\x00\x09\x60\x00",
+    "\x00\x00\x00\x00\x00\x00",
 };
 
 /* table of error strings that can be received from the RFID reader */
