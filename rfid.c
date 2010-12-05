@@ -1,0 +1,259 @@
+#define _BSD_SOURCE
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+/* mifare default keys */
+char *keys[] = {
+    "\xA0\xA1\xA2\xA3\xA4\xA5",
+    "\xB0\xB1\xB2\xB3\xB4\xB5",
+    "\xFF\xFF\xFF\xFF\xFF\xFF"
+};
+
+/* table of error strings that can be received from the RFID reader */
+const char* errors[] = { /* {{{ */
+    "succeeded",
+    "no tag",
+    "login successful",
+    "login failed",
+    "read failed",
+    "write failed",
+    "unable to read after writing",
+    "collision",
+    "not authenticated",
+    "not a value block",
+    "checksum error",
+    "command code error",
+    "unknown error"
+}; /* }}} */
+
+/* translate errorcode from RFID reader into offset in errors[] table */
+int translate_errorcode(int e) { /* {{{ */
+    if (e <= 0x06) return e;
+    switch(e) {
+        case 0x0A: return 0x07;
+        case 0x0D: return 0x08;
+        case 0xF0: return 0x09;
+        case 0xF1: return 0x0A;
+        default:   return 0x0B;
+    }
+} /* }}} */
+
+/* return pointer to error string for RFID reader error code e */
+const char *get_errstr(int e) { /* {{{ */
+    return errors[translate_errorcode(e)];
+} /* }}} */
+
+/* dumps hex and ascii values of word w with length c */
+void dump_word(char *w, unsigned int c) { /* {{{ */
+    for (int i = 0; i < c; i++) {
+        fprintf(stderr, "%02hhX", w[i]);
+    }
+    fprintf(stderr, " |");
+    for (int i = 0; i < c; i++) {
+        if ((w[i] >= 0x21) && (w[i] <= 0x7E))
+            fprintf(stderr, "%c", w[i]);
+        else
+            fprintf(stderr, ".");
+    }
+    fprintf(stderr, "|");
+};
+/* }}} */
+
+/* create command with length len from data */
+char *command(char *data, unsigned char len) { /* {{{ */
+    char *rv = malloc(sizeof(char) * (len + 3));
+    rv[0] = 0xBA;
+    rv[1] = len + 1;
+    memcpy(&(rv[2]), data, len);
+    rv[len + 2] = 0;
+    for (int i = 0; i < len+2; i++) {
+        rv[len + 2] ^= rv[i];
+    }
+    return rv;
+}
+/* }}} */
+
+/* write command in data with length len (as created by (char *)(command(data, len))) to stdout */
+void write_cmd(char *data, unsigned char len) { /* {{{ */
+    char *cmd = command(data, len);
+    fwrite(cmd, len+3, sizeof(char), stdout);
+    fflush(stdout);
+    free(cmd);
+} /* }}} */
+
+/* receive RFID reader data and store it in dst. dst must be a pointer to 256 bytes of memory
+ * returns the number of bytes received
+ */
+int receive_data(char *dst) { /* {{{ */
+    char tmp;
+    fread(dst, 2, sizeof(char), stdin);
+    int len = dst[1];
+    for (int i = 0; i < len && i < (256 - 2); i++) {
+        fread(&tmp, 1, sizeof(char), stdin);
+        dst[i + 2] = tmp;
+    }
+    return len + 2;
+}
+/* }}} */
+ 
+/* read 16 bytes of data from block `idx' into dst
+ * return value: 16 on success (length of data written into dst)
+ *             -err on failure
+ */
+int read_block(unsigned char idx, char *dst) { /* {{{ */
+    char *tmp;
+
+    tmp    = (char *)malloc(sizeof(char) * 2);
+    tmp[0] = 0x03; /* 0x03 = read data block */
+    tmp[1] = idx;
+    write_cmd(tmp, 2);
+    free(tmp);
+    
+    tmp = malloc(sizeof(char) * 256);
+    int len = receive_data(tmp);
+    int err = tmp[3];
+
+    if (err != 0x00) { /* an error occured */
+        return -err;
+    }
+
+    memcpy(dst, &(tmp[4]), 16);
+    free(tmp);
+
+    return len;
+}
+/* }}} */
+
+/* attempts an authentication to sector idx with the supplied key.
+ * if key_type is 'A' then KeyA is used, else KeyB is used.
+ * return value: the error code returned by the RFID reader
+ */
+int login_sector(unsigned char idx, char key_type, char *key) { /* {{{ */
+    char *tmp;
+    
+    tmp    = (char *)malloc(sizeof(char) * 9);
+    tmp[0] = 0x02; /* 0x02 = sector login */
+    tmp[1] = idx;
+    if (key_type == 'A') tmp[2] = 0xAA;
+    else tmp[2] = 0xBB;
+    memcpy(&(tmp[3]), key, 6);
+    write_cmd(tmp, 9);
+    free(tmp);
+
+    tmp = (char *)malloc(sizeof(char) * 256);
+    int len = receive_data(tmp);
+    int err = tmp[3];
+    free(tmp);
+
+    return err;
+} /* }}} */
+
+/* writes a new sector master key (i.e. KeyA) to sector idx. The sector needs to be logged into first.
+ * return value: error code
+ * *key contains the newly written key after execution
+ */
+int write_sector_key(unsigned char idx, char *key) { /* {{{ */
+    char *tmp;
+
+    tmp = (char *)malloc(sizeof(char) * 8);
+    tmp[0] = 0x07; /* 0x07 = write sector key */
+    tmp[1] = idx;
+    memcpy(&(tmp[2]), key, 6);
+    write_cmd(tmp, 8);
+    free(tmp);
+
+    tmp = (char *)malloc(sizeof(char) * 256);
+    int len = receive_data(tmp);
+    int err = tmp[3];
+    memcpy(key, &(tmp[4]), 6);
+    free(tmp);
+
+    return err;
+} /* }}} */
+
+/* dumps all available data sectors 0x00 to 0x0F and blocks 0x00 to 0x03 for each sector
+ * key #2 in mode 'A' is used
+ */
+void dump_data() { /* {{{ */
+    fprintf(stderr, "S#:B# Data\n");
+    for(int sector = 0; sector <= 0x0F; sector++) {
+        int err = login_sector(sector, 'A', keys[0]);
+        if (err != 0x02) {
+            fprintf(stderr, "authentication error for sector %02hhX: %s\n", sector, get_errstr(err));
+            continue;
+        }
+        for(int block = 0; block <= 0x03; block++) {
+            char *data = (char *)malloc(sizeof(char) * 16);
+            int len = read_block(block, data);
+            fprintf(stderr, "%02hhX:%02hhX ", sector, block);
+            if (len < 0) {
+                fprintf(stderr, "error: %s", get_errstr(-len));
+            } else {
+                dump_word(data, 16);
+            }
+            fprintf(stderr, "\n");
+        }
+    }
+}
+/* }}} */
+
+void dump_info() { /* {{{ */
+    unsigned char *data = (unsigned char *)malloc(sizeof(unsigned char) * 256);
+    write_cmd("\x01", 1);
+    int len = receive_data(data);
+    fprintf(stderr, "Card information:\n");
+
+    fprintf(stderr, "  Present: %02hhX (%s)\n", data[3], get_errstr(data[3]));
+    if (data[3] != 0x00) return;
+
+    fprintf(stderr, "  Serial: ");
+    for (unsigned char i = 0; i < len - 6; i++) {
+        fprintf(stderr, "%02hhX", data[i + 4]);
+    }
+
+    fprintf(stderr, "\n  Type: %02hhX (", data[len - 2]);
+    switch(data[len - 2]) {
+        case 0x01:
+            fprintf(stderr, "Mifare Standard 1K");
+            break;
+        case 0x03:
+            fprintf(stderr, "Mifare Ultra Light");
+            break;
+        case 0x04:
+            fprintf(stderr, "Mifare Standard 4K");
+            break;
+        default:
+            fprintf(stderr, "unknown");
+            break;
+    }
+    fprintf(stderr, ")\n", data[len - 2]);
+    free(data);
+}
+/* }}} */
+
+int main(int argc, char **argv) { /* {{{ */
+    if (argc > 1 && !strcmp(argv[1], "-h")) {
+        fprintf(stderr, "Usage: socat EXEC:\"%s\" /dev/ttyUSB0,raw,echo=0\n", argv[0]);
+        return 0;
+    }
+    dump_info();
+    fprintf(stderr, "Dumping data:\n");
+    dump_data();
+    
+    fprintf(stderr, "Attempting to change master key for sector 0x01\n");
+    int err = login_sector(0x01, 'A', keys[2]);
+    if (err != 0x02) {
+        fprintf(stderr, "error %02hhX during auth: %s\n", err, get_errstr(err));
+        return 0;
+    }
+    char *newkey = malloc(sizeof(char) * 6);
+    memcpy(newkey, keys[0], 6);
+    int len = write_sector_key(0x01, newkey);
+    dump_word(newkey, 6);
+    fprintf(stderr, "\n%02hhX\n", len);
+
+    return 0;
+}
+/* }}} */
