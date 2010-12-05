@@ -136,7 +136,8 @@ int read_block(unsigned char idx, char *dst) { /* {{{ */
 /* }}} */
 
 /* attempts an authentication to sector idx with the supplied key.
- * if key_type is 'A' then KeyA is used, else KeyB is used.
+ * if key_type is 0xAA then KeyA is used, if it's 0xBB, KeyB is used.
+ * All other values for key_type result in undefined behaviour!
  * return value: the error code returned by the RFID reader
  */
 int login_sector(unsigned char idx, char key_type, char *key) { /* {{{ */
@@ -145,8 +146,7 @@ int login_sector(unsigned char idx, char key_type, char *key) { /* {{{ */
     tmp    = (char *)malloc(sizeof(char) * 9);
     tmp[0] = 0x02; /* 0x02 = sector login */
     tmp[1] = idx;
-    if (key_type == 'A') tmp[2] = 0xAA;
-    else tmp[2] = 0xBB;
+    tmp[2] = key_type;
     memcpy(&(tmp[3]), key, 6);
     write_cmd(tmp, 9);
     free(tmp);
@@ -188,7 +188,7 @@ int write_sector_key(unsigned char idx, char *key) { /* {{{ */
 void dump_data() { /* {{{ */
     printf("S#:B# Data\n");
     for(int sector = 0; sector <= 0x0F; sector++) {
-        int err = login_sector(sector, 'A', keys[2]);
+        int err = login_sector(sector, 0xAA, keys[2]);
         if (err != 0x02) {
             printf("authentication error for sector %02hhX: %s\n", sector, get_errstr(err));
             continue;
