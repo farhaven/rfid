@@ -63,7 +63,7 @@ void dump_word(char *w, unsigned int c) { /* {{{ */
 
 /* create command with length len from data */
 char *command(char *data, unsigned char len) { /* {{{ */
-    char *rv = malloc(sizeof(char) * (len + 3));
+    char *rv = (char *)malloc(sizeof(char) * (len + 3));
     rv[0] = 0xBA;
     rv[1] = len + 1;
     memcpy(&(rv[2]), data, len);
@@ -111,7 +111,7 @@ int read_block(unsigned char idx, char *dst) { /* {{{ */
     write_cmd(tmp, 2);
     free(tmp);
     
-    tmp = malloc(sizeof(char) * 256);
+    tmp = (char *)malloc(sizeof(char) * 256);
     int len = receive_data(tmp);
     int err = tmp[3];
 
@@ -245,13 +245,13 @@ int main(int argc, char **argv) { /* {{{ */
     dump_data();
     
     fprintf(stderr, "Attempting to change master key for sector 0x01\n");
-    int err = login_sector(0x01, 'A', keys[2]);
+    int err = login_sector(0x01, 'A', keys[0]);
     if (err != 0x02) {
         fprintf(stderr, "error %02hhX during auth: %s\n", err, get_errstr(err));
         return 0;
     }
-    char *newkey = malloc(sizeof(char) * 6);
-    memcpy(newkey, keys[0], 6);
+    char *newkey = (char *)malloc(sizeof(char) * 6);
+    memcpy(newkey, keys[2], 6);
     int len = write_sector_key(0x01, newkey);
     dump_word(newkey, 6);
     fprintf(stderr, "\n%02hhX\n", len);
