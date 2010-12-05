@@ -229,10 +229,9 @@ void dump_data() { /* {{{ */
             char *data = (char *)malloc(sizeof(char) * 16);
             int len = read_block(block, data);
             printf("%02hhX:%02hhX ", sector, block);
+            dump_word(data, 16);
             if (len < 0) {
-                printf("error: %s", get_errstr(-len));
-            } else {
-                dump_word(data, len);
+                printf(" (%02hhX: %s)", -len, get_errstr(-len));
             }
             printf("\n");
             free(data);
@@ -251,10 +250,6 @@ void dump_sector_trailers() { /* {{{ */
         }
         char *data = (char *) malloc(sizeof(char) * 16);
         int len = read_block(0x03, data);
-        if (len < 0) {
-            free(data);
-            continue;
-        }
         char ac[4] = { data[6], data[7], data[8], data[9] };
         free(data);
         printf("%02hhX: %02hhX %02hhX %02hhX %02hhX\n", sector, ac[0], ac[1], ac[2], ac[3]);
