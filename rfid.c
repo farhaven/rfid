@@ -116,6 +116,7 @@ int read_block(unsigned char idx, char *dst) { /* {{{ */
     int err = tmp[3];
 
     if (err != 0x00) { /* an error occured */
+        free(tmp);
         return -err;
     }
 
@@ -194,6 +195,7 @@ void dump_data() { /* {{{ */
                 dump_word(data, 16);
             }
             fprintf(stderr, "\n");
+            free(data);
         }
     }
 }
@@ -253,6 +255,7 @@ int main(int argc, char **argv) { /* {{{ */
     int len = write_sector_key(0x01, newkey);
     dump_word(newkey, 6);
     fprintf(stderr, "\n%02hhX\n", len);
+    free(newkey);
 
     return 0;
 }
