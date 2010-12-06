@@ -14,9 +14,9 @@ FILE *fd_device_r;
 enum {
     MODE_NOTHING = 0x0,
     MODE_SECTORS = 0x1,
-    MODE_DATA    = 0x1 << 1
+    MODE_DATA    = 0x1 << 1,
+    MODE_BRUTE   = 0x1 << 2
 };
-short mode = MODE_NOTHING;
 /* ID of default key */
 int keyid = 2;
 /* mifare default keys */
@@ -285,6 +285,32 @@ void dump_sector_trailers() { /* {{{ */
     }
 } /* }}} */
 
+/* trys all known keys to access the sector in `brute_sector' */
+int break_sector(short brute_sector) {
+    for(keyid = 0; keyid < NUMKEYS; keyid++) {
+        int err = login_sector((unsigned char) brute_sector, 0xAA, keys[keyid]);
+        if (err == 0x02) {
+            printf("Key %d (", keyid);
+            dump_word(keys[keyid], 6);
+            printf(") opened sector %02hhX in mode 0xAA\n", brute_sector);
+            return 1;
+        }
+        err = login_sector((unsigned char) brute_sector, 0xBB, keys[keyid]);
+        if (err == 0x02) {
+            printf("Key %d (", keyid);
+            dump_word(keys[keyid], 6);
+            printf(") opened sector %02hhX in mode 0xBB\n", brute_sector);
+            return 1;
+        }
+    }
+    printf("no key in the list of known keys could open sector %02hhX\n", brute_sector);
+    return 0;
+}
+
+/* dumps card info
+ * return value: 0x1 if card is present
+ *               0x0 else
+ */
 int dump_info() { /* {{{ */
     unsigned char *data = (unsigned char *)malloc(sizeof(unsigned char) * 256);
     write_cmd("\x01", 1);
@@ -327,24 +353,36 @@ void usage(char *name) { /* {{{ */
     printf("-k id  use key id\n");
     printf("-D     dump card data\n");
     printf("-s     dump sector trailer data\n");
+    printf("-b id  try brute force to access sector #id\n");
     printf("-h     show this help\n");
     exit(0);
 }
 /* }}} */
 
 int main(int argc, char* argv[]) { /* {{{ */
+    short brute_sector = 0x00;
+    short mode = MODE_NOTHING;
     for(int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "-h")) usage(argv[0]);
         else if(!strcmp(argv[i], "-D")) mode |= MODE_DATA;
         else if(!strcmp(argv[i], "-s")) mode |= MODE_SECTORS;
-        else if(!strcmp(argv[i], "-d")) {
+        else if(!strcmp(argv[i], "-b")) {
+            if (++i < argc) {
+                mode |= MODE_BRUTE;
+                brute_sector = atoi(argv[i]);
+                if ((brute_sector < 0) || (brute_sector > 31)) {
+                    printf("Invalid sector number %s!\n", argv[i]);
+                    exit(0);
+                }
+            }else usage(argv[0]);
+        }else if(!strcmp(argv[i], "-d")) {
             if (++i < argc) device = argv[i];
             else usage(argv[0]);
         }else if(!strcmp(argv[i], "-k")) {
             if (++i < argc) {
                 keyid = atoi(argv[i]);
                 if ((keyid < 0) || (keyid >= NUMKEYS)) {
-                    printf("Unknown key %d!\n", keyid);
+                    printf("Unknown key %s!\n", argv[i]);
                     exit(0);
                 }
             } else usage(argv[0]);
@@ -379,6 +417,10 @@ int main(int argc, char* argv[]) { /* {{{ */
     if (mode & MODE_SECTORS) {
         printf("Dumping sector trailers:\n");
         dump_sector_trailers();
+    }
+    if (mode & MODE_BRUTE) {
+        printf("Trying brute force access to sector %02hhX\n", brute_sector);
+        break_sector(brute_sector);
     }
 
     return 0;
