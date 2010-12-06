@@ -11,8 +11,17 @@ char *device = "/dev/ttyUSB0";
 FILE *fd_device_w;
 FILE *fd_device_r;
 
+enum {
+    MODE_NOTHING = 0x0,
+    MODE_SECTORS = 0x1,
+    MODE_DATA    = 0x1 << 1
+};
+short mode = MODE_NOTHING;
+/* ID of default key */
+int keyid = 2;
 /* mifare default keys */
-char *keys[] = {
+#define NUMKEYS 8
+char *keys[NUMKEYS] = {
     "\xA0\xA1\xA2\xA3\xA4\xA5",
     "\xB0\xB1\xB2\xB3\xB4\xB5",
     "\xFF\xFF\xFF\xFF\xFF\xFF",
@@ -219,8 +228,8 @@ int write_sector_key(unsigned char idx, char *key) { /* {{{ */
  */
 void dump_data() { /* {{{ */
     printf("S#:B# data (hex)                       data (ASCII)\n");
-    for(int sector = 0; sector <= 0x0F; sector++) {
-        int err = login_sector(sector, 0xAA, keys[2]);
+    for(int sector = 0; sector <= 0xF0; sector += 0x10) {
+        int err = login_sector(sector, 0xAA, keys[keyid]);
         if (err != 0x02) {
             printf("authentication error for sector %02hhX: %s\n", sector, get_errstr(err));
             continue;
@@ -243,7 +252,7 @@ void dump_data() { /* {{{ */
 /* dumps and interprets all readable sector trailers */
 void dump_sector_trailers() { /* {{{ */
     for(int sector = 0; sector <= 0x0F; sector++) {
-        int err = login_sector(sector, 0xAA, keys[2]);
+        int err = login_sector(sector, 0xAA, keys[keyid]);
         if (err != 0x02) {
             printf("authentication error for sector %02hhX: %s\n", sector, get_errstr(err));
             continue;
@@ -312,8 +321,11 @@ int dump_info() { /* {{{ */
 
 /* print usage and exit */
 void usage(char *name) { /* {{{ */
-    printf("Usage: %s [-d tty] [-h]\n", name);
+    printf("Usage: %s [-d tty] [-k id] [-s] [-D] [-h]\n", name);
     printf("-d tty communicate with the RFID reader using device tty\n");
+    printf("-k id  use key id\n");
+    printf("-D     dump card data\n");
+    printf("-s     dump sector trailer data\n");
     printf("-h     show this help\n");
     exit(0);
 }
@@ -322,9 +334,22 @@ void usage(char *name) { /* {{{ */
 int main(int argc, char* argv[]) { /* {{{ */
     for(int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "-h")) usage(argv[0]);
+        else if(!strcmp(argv[i], "-D")) mode |= MODE_DATA;
+        else if(!strcmp(argv[i], "-s")) mode |= MODE_SECTORS;
         else if(!strcmp(argv[i], "-d")) {
             if (++i < argc) device = argv[i];
             else usage(argv[0]);
+        }else if(!strcmp(argv[i], "-k")) {
+            if (++i < argc) {
+                keyid = atoi(argv[i]);
+                if ((keyid < 0) || (keyid >= NUMKEYS)) {
+                    printf("Unknown key %d!\n", keyid);
+                    exit(0);
+                }
+            } else usage(argv[0]);
+            printf("Using key #%d/%d: ", keyid, NUMKEYS);
+            dump_word(keys[keyid], 6);
+            printf("\n");
         }else usage(argv[0]);
     }
 
@@ -343,9 +368,14 @@ int main(int argc, char* argv[]) { /* {{{ */
     tcflush(fileno(fd_device_w), TCIOFLUSH);
     tcflush(fileno(fd_device_r), TCIOFLUSH);
 
-    if (dump_info()) {
+    if (!dump_info()) {
+        exit(0);
+    }
+    if (mode & MODE_DATA) {
         printf("Dumping data:\n");
         dump_data();
+    }
+    if (mode & MODE_SECTORS) {
         printf("Dumping sector trailers:\n");
         dump_sector_trailers();
     }
