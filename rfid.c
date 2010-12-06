@@ -356,8 +356,9 @@ int dump_info() { /* {{{ */
 
 /* print usage and exit */
 void usage(char *name) { /* {{{ */
-    printf("Usage: %s [-d tty] [-k id] [-s] [-D] [-h]\n", name);
+    printf("Usage: %s [-d tty] [-K] [-k id] [-D] [-s] [-b id] [-h]\n", name);
     printf("-d tty communicate with the RFID reader using device tty\n");
+    printf("-K     dump available default keys\n");
     printf("-k id  use key id\n");
     printf("-D     dump card data\n");
     printf("-s     dump sector trailer data\n");
@@ -367,6 +368,17 @@ void usage(char *name) { /* {{{ */
 }
 /* }}} */
 
+/* dump available keys */
+void dump_keys(void) { /* {{{ */
+    printf("Dumping available default keys\n\n");
+    for(keyid = 0; keyid < NUMKEYS; keyid++) {
+        printf("% 3d: ", keyid);
+        dump_word(keys[keyid], 6);
+        printf("\n");
+    }
+    exit(0);
+} /* }}} */
+
 int main(int argc, char* argv[]) { /* {{{ */
     short brute_sector = 0x00;
     short mode = MODE_NOTHING;
@@ -374,6 +386,7 @@ int main(int argc, char* argv[]) { /* {{{ */
         if (!strcmp(argv[i], "-h")) usage(argv[0]);
         else if(!strcmp(argv[i], "-D")) mode |= MODE_DATA;
         else if(!strcmp(argv[i], "-s")) mode |= MODE_SECTORS;
+        else if(!strcmp(argv[i], "-K")) dump_keys();
         else if(!strcmp(argv[i], "-b")) {
             if (++i < argc) {
                 mode |= MODE_BRUTE;
