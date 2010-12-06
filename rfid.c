@@ -267,7 +267,7 @@ void dump_sector_trailers() { /* {{{ */
             continue;
         }
         char *data = (char *) malloc(sizeof(char) * 16);
-        int len = read_block(0x03, data);
+        int len = read_block(sector * 0x03, data);
         char ac[4] = { data[6], data[7], data[8], data[9] };
         free(data);
         printf("%02hhX: %02hhX %02hhX %02hhX %02hhX\n", sector, ac[0], ac[1], ac[2], ac[3]);
