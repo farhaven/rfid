@@ -34,6 +34,11 @@ char *keys[NUMKEYS] = {
     "\xFF\xFF\xFF\xFF\xFF\xFF",
 };
 
+/* returns the sector number for block `idx' */
+int block_get_sector(int idx) { /* {{{ */
+    return (int)(idx / 4);
+} /* }}} */
+
 /* table of error strings that can be received from the RFID reader */
 const char* errors[] = { /* {{{ */
     "succeeded",
@@ -231,20 +236,18 @@ int write_sector_key(unsigned char idx, char *key) { /* {{{ */
  */
 void dump_data() { /* {{{ */
     printf("S#:B# data (hex)                       data (ASCII)\n");
-    int sector = 0x00;
     for(int block = 0; block <= 0x3F; block++) {
         if (block % 0x04 == 0) {
-            int err = login_sector(sector, 0xAA, keys[keyid]);
-            sector++;
+            int err = login_sector(block_get_sector(block), 0xAA, keys[keyid]);
             if (err != 0x02) {
-                printf("could not authenticate to sector %02hhX: %s\n", sector, get_errstr(err));
-                block += 4;
+                printf("could not authenticate to sector %02hhX: %s\n", block_get_sector(block), get_errstr(err));
+                block += 3;
                 continue;
             }
         }
         char *data = (char *)malloc(sizeof(char) * 16);
         int len = read_block(block, data);
-        printf("%02hhX:%02hhX ", sector, block);
+        printf("%02hhX:%02hhX ", block_get_sector(block), block);
         dump_word(data, 16);
         if (len < 0) {
             printf(" (%02hhX: %s)", -len, get_errstr(-len));
