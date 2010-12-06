@@ -382,6 +382,8 @@ void dump_keys(void) { /* {{{ */
 int main(int argc, char* argv[]) { /* {{{ */
     short brute_sector = 0x00;
     short mode = MODE_NOTHING;
+
+    /* {{{ parameter parsing */
     for(int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "-h")) usage(argv[0]);
         else if(!strcmp(argv[i], "-D")) mode |= MODE_DATA;
@@ -411,8 +413,9 @@ int main(int argc, char* argv[]) { /* {{{ */
             dump_word(keys[keyid], 6);
             printf("\n");
         }else usage(argv[0]);
-    }
+    } /* }}} */
 
+    /* {{{ tty acquisition */
     if ((fd_device_r = fopen(device, "r")) == NULL) {
         fprintf(stderr, "couldn't open %s for reading: %s\n", device, strerror(errno));
         exit(1);
@@ -427,6 +430,7 @@ int main(int argc, char* argv[]) { /* {{{ */
     }
     tcflush(fileno(fd_device_w), TCIOFLUSH);
     tcflush(fileno(fd_device_r), TCIOFLUSH);
+    /* }}} */
 
     if (!dump_info()) {
         exit(0);
