@@ -10,7 +10,6 @@
 char *device = "/dev/ttyUSB0";
 FILE *fd_device_w;
 FILE *fd_device_r;
-
 enum {
     MODE_NOTHING = 0x0,
     MODE_SECTORS = 0x1,
@@ -232,23 +231,26 @@ int write_sector_key(unsigned char idx, char *key) { /* {{{ */
  */
 void dump_data() { /* {{{ */
     printf("S#:B# data (hex)                       data (ASCII)\n");
-    for(int sector = 0; sector <= 0xF0; sector += 0x10) {
-        int err = login_sector(sector, 0xAA, keys[keyid]);
-        if (err != 0x02) {
-            printf("authentication error for sector %02hhX: %s\n", sector, get_errstr(err));
-            continue;
-        }
-        for(int block = 0; block <= 0x03; block++) {
-            char *data = (char *)malloc(sizeof(char) * 16);
-            int len = read_block(block, data);
-            printf("%02hhX:%02hhX ", sector, block);
-            dump_word(data, 16);
-            if (len < 0) {
-                printf(" (%02hhX: %s)", -len, get_errstr(-len));
+    int sector = 0x00;
+    for(int block = 0; block <= 0x3F; block++) {
+        if (block % 0x04 == 0) {
+            int err = login_sector(sector, 0xAA, keys[keyid]);
+            sector++;
+            if (err != 0x02) {
+                printf("could not authenticate to sector %02hhX: %s\n", sector, get_errstr(err));
+                block += 4;
+                continue;
             }
-            printf("\n");
-            free(data);
         }
+        char *data = (char *)malloc(sizeof(char) * 16);
+        int len = read_block(block, data);
+        printf("%02hhX:%02hhX ", sector, block);
+        dump_word(data, 16);
+        if (len < 0) {
+            printf(" (%02hhX: %s)", -len, get_errstr(-len));
+        }
+        printf("\n");
+        free(data);
     }
 }
 /* }}} */
@@ -289,7 +291,7 @@ void dump_sector_trailers() { /* {{{ */
 } /* }}} */
 
 /* trys all known keys to access the sector in `brute_sector' */
-int break_sector(short brute_sector) {
+int break_sector(short brute_sector) { /* {{{ */
     for(keyid = 0; keyid < NUMKEYS; keyid++) {
         int err = login_sector((unsigned char) brute_sector, 0xAA, keys[keyid]);
         if (err == 0x02) {
@@ -308,7 +310,7 @@ int break_sector(short brute_sector) {
     }
     printf("no key in the list of known keys could open sector %02hhX\n", brute_sector);
     return 0;
-}
+} /* }}} */
 
 /* dumps card info
  * return value: 0x1 if card is present
