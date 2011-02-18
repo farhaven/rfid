@@ -34,6 +34,19 @@ char *keys[NUMKEYS] = {
     "\xFF\xFF\xFF\xFF\xFF\xFF",
 };
 
+/* struct representing a card */
+typedef enum {
+    CARD_UNKNOWN = 0,
+    CARD_MIFARE_1K,
+    CARD_MIFARE_4K,
+    CARD_MIFARE_ULTRA,
+    CARD_DESFIRE
+} card_type;
+
+struct {
+    card_type t;
+} card;
+
 /* returns the sector number for block `idx' */
 int block_get_sector(int idx) { /* {{{ */
     return (int)(idx / 4);
@@ -337,18 +350,23 @@ int dump_info() { /* {{{ */
     switch(data[len - 2]) {
         case 0x01:
             printf("Mifare Standard 1K");
+            card.t = CARD_MIFARE_1K;
             break;
         case 0x03:
             printf("Mifare Ultra Light");
+            card.t = CARD_MIFARE_ULTRA;
             break;
         case 0x04:
             printf("Mifare Standard 4K");
+            card.t = CARD_MIFARE_4K;
             break;
         case 0x06:
             printf("EV1 / NXP DESfire");
+            card.t = CARD_DESFIRE;
             break;
         default:
             printf("unknown");
+            card.t = CARD_UNKNOWN;
             break;
     }
     printf(")\n", data[len - 2]);
@@ -393,14 +411,15 @@ int main(int argc, char* argv[]) { /* {{{ */
         else if(!strcmp(argv[i], "-s")) mode |= MODE_SECTORS;
         else if(!strcmp(argv[i], "-K")) dump_keys();
         else if(!strcmp(argv[i], "-b")) {
+            mode |= MODE_BRUTE;
             if (++i < argc) {
-                mode |= MODE_BRUTE;
                 brute_sector = atoi(argv[i]);
                 if ((brute_sector < 0) || (brute_sector > 31)) {
                     printf("Invalid sector number %s!\n", argv[i]);
                     exit(0);
                 }
-            }else usage(argv[0]);
+            }else
+                brute_sector = -1;
         }else if(!strcmp(argv[i], "-d")) {
             if (++i < argc) device = argv[i];
             else usage(argv[0]);
@@ -438,6 +457,12 @@ int main(int argc, char* argv[]) { /* {{{ */
     if (!dump_info()) {
         exit(0);
     }
+
+    if ((card.t != CARD_MIFARE_1K) && (card.t != CARD_MIFARE_4K)) {
+        /* we don't support anything else yet, mostly because of lack of tags to play with */
+        exit(0);
+    }
+
     if (mode & MODE_DATA) {
         printf("Dumping data:\n");
         dump_data();
@@ -447,8 +472,15 @@ int main(int argc, char* argv[]) { /* {{{ */
         dump_sector_trailers();
     }
     if (mode & MODE_BRUTE) {
-        printf("Trying brute force access to sector %02hhX\n", brute_sector);
-        break_sector(brute_sector);
+        if (brute_sector != -1) {
+            printf("Trying brute force access to sector %02hhX\n", brute_sector);
+            break_sector(brute_sector);
+        } else {
+            short idx, max_idx = (card.t == CARD_MIFARE_4K) ? 0x1F : 0x0E;
+            printf("Brute forcing access to all sectors\n");
+            for (idx = 0; idx <= max_idx; idx++)
+                break_sector(idx);
+        }
     }
 
     return 0;
