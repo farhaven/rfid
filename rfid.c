@@ -344,6 +344,9 @@ int dump_info() { /* {{{ */
         case 0x04:
             printf("Mifare Standard 4K");
             break;
+        case 0x06:
+            printf("EV1 / NXP DESfire");
+            break;
         default:
             printf("unknown");
             break;
